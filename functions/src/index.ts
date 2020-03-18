@@ -368,3 +368,30 @@ export const getItems  = functions.https.onRequest( async (request, response) =>
     });
 });
 
+export const getCombos = functions.https.onRequest( async (request, response) => {
+    corsHandler(request, response, async () => {
+
+        if (request.headers.branchid === undefined) {
+            return response.status(201).send('No branchid in header');
+        }
+        const combos = await admin.firestore().collection('combos').where('branchID', "==", request.headers.branchid).get();
+        if (combos.docs.length === 0) return response.status(201).send('No combos in database');
+        const list: any = [];
+        combos.docs.map(el => list.push({id: el.id, data: el.data()}));
+        return response.status(200).send(list);
+    });
+});
+
+export const getSingleItem = functions.https.onRequest( async (request, response) => {
+    corsHandler(request, response, async () => {
+
+        if (request.headers.id === undefined) {
+            return response.status(201).send('No id in header');
+        }
+        const item = await admin.firestore().collection('Items').doc(request.headers.id.toString()).get();
+        if (!item.exists) return response.status(201).send('No Items in database with id');
+
+        return response.status(200).send({id: item.id, data: item.data()});
+    });
+});
+
