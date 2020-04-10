@@ -32,6 +32,20 @@ export const addManager = function (body: {
     };
 };
 
+export const addCustomer = function (body: {
+    fullName: string,
+    contactNumber: string,
+    email: string,
+}, passwordEncrypted: string) {
+    return {
+        fullName: body.fullName,
+        contactNumber: body.contactNumber,
+        email: body.email,
+        password: passwordEncrypted,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+    }
+};
+
 export const addOwner = function (body: {
     fullName: string,
     contactNumber: string,
@@ -91,9 +105,6 @@ export const addBranch = function (body: {
     type: string,
     items: Array<{ id: string, category: string }> | string,
     combos: Array<{ id: string, category: string }> | string,
-    customerAnalytics: Array<string> | string,
-    revenueAnalytics: Array<string> | string,
-    employeeAnalytics: Array<string> | string,
     inventory: Array<string> | string,
     customers: Array<string> | string
 }, managerID: string, employees: Array<{ id: string, designation: string }> | string) {
@@ -110,9 +121,6 @@ export const addBranch = function (body: {
         employees: employees,
         items: body.items,
         combos: body.combos,
-        customerAnalytics: body.customerAnalytics,
-        revenueAnalytics: body.revenueAnalytics,
-        employeeAnalytics: body.employeeAnalytics,
         inventory: body.inventory,
         customers: body.customers
     }
@@ -121,73 +129,92 @@ export const addBranch = function (body: {
 export const addEmployee = function (body: {
     fullName: string,
     email: string,
-    ownerID: string,
-    restaurantID: string,
     branchID: string,
     contactNumber: string,
     profilePic: string,
-    designation: string
-}, passwordEncrypted: string) {
+    accountDetails?: {
+        name: string,
+        bankName: string,
+        number: string,
+        ifsc: string,
+        gst: string
+    },
+    payScale: { price: number, scale: string },
+    address: string,
+    designation: string,
+    gender:string,
+    rating:number,
+    status:string,
+    workingHours:number,
+    employementType:string
+}, passwordEncrypted: string, keywords: Array<string>) {
     return {
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         fullName: body.fullName,
         email: body.email,
         password: passwordEncrypted,
-        ownerID: body.ownerID,
-        restaurantID: body.restaurantID,
         profilePic: body.profilePic,
         contactNumber: body.contactNumber,
-        designation: body.designation
+        accountDetails: body.accountDetails,
+        keywords,
+        gender: body.gender,
+        address: body.address,
+        payScale: body.payScale,
+        rating:body.rating,
+        designation: body.designation,
+        status:'ACTIVE',
+        workingHours:body.workingHours,
+        employementType:body.employementType,
     }
 };
 
 export const addReservation = function (body: {
     customerName: string,
-    customerEmail: string,
     customerContact: string,
     branchID: string,
-    bookingDate: Date,
-    bookingTime: Date,
-    guests: number,
-    status: 'RESERVED' | 'COMPLETED' | 'ONGOING' | 'CANCELLED'
-}) {
+    reservationDate: Date,
+    reservationTime: Date,
+    totalGuests: string,
+    // status: 'RESERVED' | 'CANCELLED'
+}, keywords: Array<string>) {
     return {
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         customerName: body.customerName,
-        customerEmail: body.customerEmail,
         customerContact: body.customerContact,
         branchID: body.branchID,
-        bookingDate: body.bookingDate,
-        bookingTime: body.bookingTime,
-        guests: body.guests,
-        status: body.status
+        reservationDate: body.reservationDate,
+        reservationTime: body.reservationTime,
+        totalGuests: body.totalGuests,
+        keywords: keywords,
+        status: 'RESERVED'
     }
 };
 
 export const addItem = function (body: {
     name: string,
-    cuisine: string,
-    type: string,
+    category: string,
     branchID: string,
     ratings: number,
     availability: boolean,
     price: number,
     description: string,
-    favourite: boolean,
-    itemImage: string
-}) {
+    favorite: boolean,
+    itemImage: string,
+    // status:'ACTIVE' | 'DELETED'
+}, keywords: Array<string>) {
     return {
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         name: body.name,
-        cuisine: body.cuisine,
-        type: body.type,
+        category: body.category,
         branchID: body.branchID,
         ratings: body.ratings,
         availability: body.availability,
         price: body.price,
         description: body.description,
-        favourite: body.favourite,
-        itemImage: body.itemImage
+        favorite: body.favorite,
+        itemImage: body.itemImage,
+        keywords,
+        status: 'ACTIVE'
     }
 };
 
@@ -216,8 +243,7 @@ export const addCombo = function (body: {
     description: string,
     rating: number,
     price: number,
-    status: 'ACTIVE' | 'INACTIVE'
-}) {
+}, keywords: Array<string>) {
     return {
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         branchID: body.branchID,
@@ -226,7 +252,8 @@ export const addCombo = function (body: {
         description: body.description,
         rating: body.rating,
         price: body.price,
-        status: body.status
+        keywords,
+        status: 'ACTIVE'
     }
 };
 
@@ -242,15 +269,16 @@ export const addOnlineOrder = function (body: {
         id: string, name: string, quantity: number
     }>,
     value: number,
-    status: 'CONFIRMED' | 'CANCELLED' | 'COMPLETED'
-}) {
+},  createdDate:Date) {
+    const date: Date = createdDate;
     return {
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdDate: `${date.getDate()}:${date.getMonth()}:${date.getFullYear()}`,
         branchID: body.branchID,
         customer: body.customer,
         items: body.items,
         value: body.value,
-        status: body.status
+        status: 'ACTIVE'
     }
 };
 
@@ -258,13 +286,13 @@ export const addOrder = function (body: {
     branchID: string,
     customer: {
         name: string,
-        contactNumber:string
+        contactNumber: string
     },
     items: Array<{
         id: string, name: string, quantity: number
     }>,
     value: number,
-    status: 'ACTIVE'|'SERVED'|'CANCELLED',
+    status: 'ACTIVE' | 'SERVED' | 'CANCELLED',
     tableNumber: number
 }) {
     return {
@@ -274,6 +302,125 @@ export const addOrder = function (body: {
         items: body.items,
         value: body.value,
         status: body.status,
-        tableNumber:body.tableNumber
+        tableNumber: body.tableNumber
+    }
+};
+
+export const addSupplier = function (body: {
+    fullName: string,
+    contactNumber: string,
+    email: string,
+    rawItems: Array<{
+        id: string,
+        name: string
+    }>,
+    method: 'CASH' | 'BANKING',
+    accountDetails?: {
+        name: string,
+        bankName: string,
+        number: string,
+        ifsc: string,
+        gst: string
+    },
+    branchID: string,
+}, keywords: Array<string>) {
+    return {
+        fullName: body.fullName,
+        contactNumber: body.contactNumber,
+        email: body.email,
+        rawItems: body.rawItems,
+        method: body.method,
+        accountDetails: body.accountDetails,
+        keywords,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+    }
+};
+
+export const addCategory_unit = function (body: {
+    name: string,
+    default: boolean,
+    branchID: string,
+}) {
+    return {
+        name: body.name,
+        default: body.default,
+        branchID: body.branchID,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+    }
+};
+
+export const addStorage = function (body: {
+    name: string,
+    cleaningSchedule: string,
+    branchID: string,
+    lastClean: Date,
+    employeeIncharge: {
+        id: string,
+        name: string
+    }
+}) {
+    return {
+        name: body.name,
+        cleaningSchedule: body.cleaningSchedule,
+        branchID: body.branchID,
+        lastClean: body.lastClean,
+        employeeIncharge: body.employeeIncharge,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+    }
+};
+
+export const addWastages = function (body: {
+    item: { id: string, name: string },
+    branchID: string,
+    type: string,
+    reason: string,
+    employeeIncharge: {
+        id: string,
+        name: string
+    },
+    units: string,
+    UOM?: string,
+
+}, cost: string) {
+    return {
+        items: body.item,
+        branchID: body.branchID,
+        type: body.type,
+        reason: body.reason,
+        employeeIncharge: body.employeeIncharge,
+        units: body.units,
+        UOM: body.UOM,
+        cost,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+    }
+};
+
+export const addExpense = function (body: {
+    items: Array<{ name: string, quantity: string, price: number }>,
+    branchID: string,
+    type: string,
+    period: string,
+    comments: string,
+    employeeIncharge: {
+        id: string,
+        name: string
+    },
+    paymentStatus: string,
+    billAmount: string,
+    category: string
+
+}, keywords: Array<string>) {
+    return {
+        items: body.items,
+        branchID: body.branchID,
+        type: body.type,
+        comments: body.comments,
+        employeeIncharge: body.employeeIncharge,
+        paymentStatus: body.paymentStatus,
+        category: body.category,
+        billAmount: body.billAmount,
+        period: body.period,
+        keywords,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
     }
 };
