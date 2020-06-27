@@ -21,7 +21,12 @@ import {
     validateOrder,
     validateCustomer,
     validateReset,
-    validateSupplier, validateCategory_unit, validateStorage, validateWastage, validateExpense
+    validateSupplier,
+    validateCategory_unit,
+    validateStorage,
+    validateWastage,
+    validateExpense,
+    validateInventoryItem, validateExpenseCategory, validateMenuCategory
 } from "./schemas";
 import * as bcrypt from "bcrypt";
 import {
@@ -40,8 +45,9 @@ import {
     addSupplier,
     addCategory_unit,
     addStorage,
-    addWastages,
-    addExpense
+    addExpense,
+    addInventoryItem,
+    addWastage, addExpenseCategory, addMenu_category
 } from "./objects";
 import {generateKeywords} from "./Algo";
 
@@ -352,19 +358,19 @@ export const updateOnlineOrder = functions.https.onRequest(async (request, respo
 
 //menu item
 export const getSingleItem = functions.https.onRequest(async (request, response) => {
-        return corsHandler(request, response, async () => {
-            const decoded = auth(request, response);
-            if (decoded) {
+    return corsHandler(request, response, async () => {
+        const decoded = auth(request, response);
+        if (decoded === undefined) {
             if (request.headers.id === undefined) {
                 return response.status(201).send('No id in header');
             }
-            const item = await admin.firestore().collection('Items').doc(request.headers.id.toString()).get();
+            const item = await admin.firestore().collection('Items').doc(`${request.headers.id}`).get();
             if (!item.exists) return response.status(201).send('No Items in database with id');
 
             return response.status(200).send({id: item.id, data: item.data()});
-            }
-            return response.status(201).send(decoded);
-        });
+        }
+        return response.status(201).send(decoded);
+    });
 });
 
 export const createItem = functions.https.onRequest(async (request, response) => {
@@ -379,6 +385,9 @@ export const createItem = functions.https.onRequest(async (request, response) =>
 
             const branch = await admin.firestore().collection('branches').doc(request.body.branchID).get();
             if (!branch.exists) return response.status(201).send('branch does not exist');
+
+            const categories = await admin.firestore().collection('MenuCategories').where('name', '==', request.body.category.name).get();
+            if (categories.docs.length === 0) return response.status(201).send('Category not found in database,\n please create new category');
 
             const items = await admin.firestore()
                 .collection('Items')
@@ -411,6 +420,8 @@ export const updateItem = functions.https.onRequest(async (request, response) =>
             const price = request.body.price;
             const itemImage = request.body.itemImage;
             const favorite = request.body.favorite;
+            const availability = request.body.availability;
+            const status = request.body.status;
             const ingredients: Array<{ id: string, name: string, quantity: string, UOF: string }> = request.body.ingredients;
             const data: any = {};
 
@@ -435,6 +446,12 @@ export const updateItem = functions.https.onRequest(async (request, response) =>
             if (favorite !== undefined) {
                 data.favorite = favorite
             }
+            if (status !== undefined) {
+                data.status = status;
+            }
+            if (availability !== undefined) {
+                data.availability = availability
+            }
 
             await admin.firestore().collection('Items').doc(request.body.itemID).set(data, {merge: true});
 
@@ -453,55 +470,147 @@ export const getItems = functions.https.onRequest(async (request, response) => {
             if (request.headers.branchid === undefined) {
                 return response.status(201).send('No branchid in header');
             }
-            console.log('data', JSON.stringify(request.headers));
-            if (request.headers.favorite === undefined
-                && request.headers.category === undefined
-                && request.headers.sortby === undefined) {
+            if (
+                request.headers.favorite === undefined &&
+                request.headers.category === undefined &&
+                request.headers.sortby === undefined
+            ) {
                 items = await admin.firestore()
                     .collection('Items')
                     .where('branchID', "==", request.headers.branchid)
                     .where('status', '==', request.headers.status)
                     .get();
-            } else if (request.headers.favorite !== undefined
-                && request.headers.category !== undefined
-                && request.headers.sortby === undefined) {
-                items = await admin.firestore()
-                    .collection('Items')
-                    .where('branchID', "==", request.headers.branchid)
-                    .where('status', '==', request.headers.status)
-                    .where('category', '==', request.headers.category)
-                    .where('favorite', '==', request.headers.favorite)
-                    .get();
-            } else if (request.headers.favorite === undefined
-                && request.headers.category !== undefined
-                && request.headers.sortby === undefined) {
+            } else if (
+                request.headers.favorite !== undefined &&
+                request.headers.category !== undefined &&
+                request.headers.sortby === undefined
+            ) {
                 items = await admin.firestore()
                     .collection('Items')
                     .where('branchID', "==", request.headers.branchid)
                     .where('status', '==', request.headers.status)
                     .where('category', '==', request.headers.category)
+                    .where('favorite', '==', true)
                     .get();
-            } else if (request.headers.favorite === undefined
-                && request.headers.category === undefined
-                && request.headers.sortby !== undefined) {
+            } else if (
+                request.headers.favorite !== undefined &&
+                request.headers.category === undefined &&
+                request.headers.sortby === undefined
+            ) {
+                items = await admin.firestore()
+                    .collection('Items')
+                    .where('branchID', "==", request.headers.branchid)
+                    .where('status', '==', request.headers.status)
+                    .where('favorite', '==', true)
+                    .get();
+            } else if (
+                request.headers.favorite === undefined &&
+                request.headers.category !== undefined &&
+                request.headers.sortby === undefined
+            ) {
+                const category = JSON.parse(`${request.headers.category}`);
+                items = await admin.firestore()
+                    .collection('Items')
+                    .where('branchID', "==", request.headers.branchid)
+                    .where('status', '==', request.headers.status)
+                    .where('categoryName', '==', category.name)
+                    .get();
+            } else if (
+                request.headers.favorite === undefined &&
+                request.headers.category === undefined &&
+                request.headers.sortby !== undefined
+            ) {
                 items = await admin.firestore()
                     .collection('Items')
                     .where('branchID', "==", request.headers.branchid)
                     .where('status', '==', request.headers.status)
                     .orderBy(`${request.headers.sortby}`, "asc")
-                    .limit(10)
                     .get();
             }
             if (items.docs.length === 0) return response.status(200).send([]);
 
-            const list: any = [];
-            items.docs.map(el => list.push({id: el.id, data: el.data()}));
+            const list: Array<any> = [];
+            items.docs.map(ele => {
+                let isPresent = false
+                list.map(elem => {
+                    if (ele.data().categoryName === elem.category.name) {
+                        return isPresent = true
+                    }
+                    return
+                })
+
+                let category = !isPresent ? ele.data().categoryName : null;
+                let categoryItems: Array<any> = [];
+
+                if (category !== null) {
+                    items.docs.map(element => {
+                        if (element.data().categoryName === category) {
+                            return categoryItems.push({id:element.id,data:element.data()});
+                        }
+                        return
+                    })
+                    return list.push({
+                        category: {name: ele.data().category.name, icon: ele.data().category.icon},
+                        items: categoryItems
+                    })
+                }
+                return
+            })
+            // items.docs.map(el => list.push({id: el.id, data: el.data()}));
             return response.status(200).send(list);
         }
         return response.status(201).send(decoded);
     });
 });
 
+export const createMenuCategory = functions.https.onRequest(async (request, response) => {
+    return corsHandler(request, response, async () => {
+        const decoded = auth(request, response);
+        if (decoded === undefined) {
+            const {error} = validateMenuCategory(request.body);
+            if (error) {
+                return response.status(201).send(error.details[0].message);
+            }
+
+            const branch = await admin.firestore().collection('branches').doc(request.body.branchID).get();
+            if (!branch.exists) return response.status(201).send('branch does not exist');
+
+            const categories = await admin.firestore()
+                .collection('MenuCategories')
+                .where('branchID', '==', request.body.branchID)
+                .where('name', '==', request.body.name)
+                .get();
+            if (categories.docs.length > 0) return response.status(201).send('Category with same name already present');
+
+
+            await admin.firestore().collection('MenuCategories').add(addMenu_category(request.body));
+            return response.status(200).send('Category Added');
+        }
+        return response.status(201).send(decoded);
+    });
+});
+
+export const getMenuCategories = functions.https.onRequest(async (request, response) => {
+    return corsHandler(request, response, async () => {
+        const decoded = auth(request, response);
+        if (decoded === undefined) {
+            if (request.headers.branchid === undefined) {
+                return response.status(201).send('No branchid in header');
+            }
+            const categories = await admin.firestore()
+                .collection('MenuCategories')
+                .where('branchID', "==", request.headers.branchid)
+                .get();
+
+            if (categories.docs.length === 0) return response.status(201).send('No categories in database');
+
+            const list: any = [];
+            categories.docs.map(el => list.push({id: el.id, data: el.data()}));
+            return response.status(200).send(list);
+        }
+        return response.status(201).send(decoded);
+    });
+});
 
 //combo
 export const createCombo = functions.https.onRequest(async (request, response) => {
@@ -544,10 +653,10 @@ export const getCombos = functions.https.onRequest(async (request, response) => 
             const combos = await admin.firestore()
                 .collection('combos')
                 .where('branchID', "==", request.headers.branchid)
-                .where('status', '==', request.body.status)
+                .where('status', '==', request.headers.status)
                 .limit(10)
                 .get();
-            if (combos.docs.length === 0) return response.status(201).send('No combos in database');
+            if (combos.docs.length === 0) return response.status(200).send([]);
             const list: any = [];
             combos.docs.map(el => list.push({id: el.id, data: el.data()}));
             return response.status(200).send(list);
@@ -557,7 +666,7 @@ export const getCombos = functions.https.onRequest(async (request, response) => 
 
 });
 
-export const updateCombos = functions.https.onRequest(async (request, response) => {
+export const updateCombo = functions.https.onRequest(async (request, response) => {
 
     return corsHandler(request, response, async () => {
         const decoded = auth(request, response);
@@ -567,7 +676,7 @@ export const updateCombos = functions.https.onRequest(async (request, response) 
 
             const name = request.body.name;
             const description = request.body.description;
-            const ratings = request.body.ratings;
+            const rating = request.body.rating;
             const price = request.body.price;
             const items = request.body.items;
             const status = request.body.status;
@@ -579,8 +688,8 @@ export const updateCombos = functions.https.onRequest(async (request, response) 
             if (description !== undefined) {
                 data.description = description;
             }
-            if (ratings !== undefined) {
-                data.ratings = ratings;
+            if (rating !== undefined) {
+                data.rating = rating;
             }
             if (price !== undefined) {
                 data.price = price;
@@ -605,9 +714,9 @@ export const updateCombos = functions.https.onRequest(async (request, response) 
 //table
 export const createTable = functions.https.onRequest(async (request, response) => {
 
-        return corsHandler(request, response, async () => {
-            const decoded = auth(request, response);
-            if (decoded === undefined) {
+    return corsHandler(request, response, async () => {
+        const decoded = auth(request, response);
+        if (decoded === undefined) {
             const {error} = validateTable(request.body);
             if (error) {
                 return response.status(201).send(error.details[0].message)
@@ -619,17 +728,17 @@ export const createTable = functions.https.onRequest(async (request, response) =
             await admin.firestore().collection(`tables-${request.body.branchID}`).add(addTable(request.body));
 
             return response.status(200).send('Table Created');
-            }
-            return response.status(201).send(decoded);
-        });
+        }
+        return response.status(201).send(decoded);
+    });
 
 });
 
 export const updateTable = functions.https.onRequest(async (request, response) => {
 
-        return corsHandler(request, response, async () => {
-            const decoded = auth(request, response);
-            if (decoded === undefined) {
+    return corsHandler(request, response, async () => {
+        const decoded = auth(request, response);
+        if (decoded === undefined) {
             const table = await admin.firestore().collection(`tables-${request.body.branchID}`).doc(request.body.tableID).get();
             if (!table.exists) return response.status(201).send('Table does not exist Or wrong tableId');
             if (request.body.delete === true) {
@@ -656,9 +765,9 @@ export const updateTable = functions.https.onRequest(async (request, response) =
             await admin.firestore().collection(`tables-${request.body.branchID}`).doc(request.body.tableID).set(data, {merge: true});
 
             return response.status(200).send('Table Updated');
-            }
-            return response.status(201).send(decoded);
-        });
+        }
+        return response.status(201).send(decoded);
+    });
 
 });
 
@@ -666,9 +775,9 @@ export const updateTable = functions.https.onRequest(async (request, response) =
 //order
 export const createOrder = functions.https.onRequest(async (request, response) => {
 
-        return corsHandler(request, response, async () => {
-            const decoded = auth(request, response);
-            if (decoded === undefined) {
+    return corsHandler(request, response, async () => {
+        const decoded = auth(request, response);
+        if (decoded === undefined) {
             const {error} = validateOrder(request.body);
             if (error) {
                 return response.status(201).send(error.details[0].message)
@@ -679,9 +788,9 @@ export const createOrder = functions.https.onRequest(async (request, response) =
             await admin.firestore().collection('orders').add(addOrder(request.body));
 
             return response.status(200).send('Order Created');
-            }
-            return response.status(201).send(decoded);
-        });
+        }
+        return response.status(201).send(decoded);
+    });
 
 });
 
@@ -730,7 +839,7 @@ export const getSuppliers = functions.https.onRequest(async (request, response) 
                 .limit(10)
                 .get();
 
-            if (suppliers.docs.length === 0) return response.status(201).send('No Suppliers in database');
+            if (suppliers.docs.length === 0) return response.status(200).send([]);
 
             const list: any = [];
             suppliers.docs.map(el => list.push({id: el.id, data: el.data()}));
@@ -742,9 +851,9 @@ export const getSuppliers = functions.https.onRequest(async (request, response) 
 
 export const updateSuppliers = functions.https.onRequest(async (request, response) => {
 
-        return corsHandler(request, response, async () => {
-            const decoded = auth(request, response);
-            if (decoded === undefined) {
+    return corsHandler(request, response, async () => {
+        const decoded = auth(request, response);
+        if (decoded === undefined) {
             const supplier = await admin.firestore().collection('Suppliers').doc(request.body.supplierID).get();
             if (!supplier.exists) return response.status(201).send('Supplier does not exist Or wrong supplierID');
 
@@ -782,9 +891,9 @@ export const updateSuppliers = functions.https.onRequest(async (request, respons
             await admin.firestore().collection('Suppliers').doc(request.body.supplierID).set(data, {merge: true});
 
             return response.status(200).send('Supplier Updated');
-            }
-            return response.status(201).send(decoded);
-        });
+        }
+        return response.status(201).send(decoded);
+    });
 
 });
 
@@ -792,9 +901,9 @@ export const updateSuppliers = functions.https.onRequest(async (request, respons
 //Employees
 export const createEmployee = functions.https.onRequest(async (request, response) => {
 
-        return corsHandler(request, response, async () => {
-            const decoded = auth(request, response);
-            if (decoded === undefined) {
+    return corsHandler(request, response, async () => {
+        const decoded = auth(request, response);
+        if (decoded === undefined) {
             const {error} = validateEmployee(request.body);
             if (error) {
                 return response.status(201).send(error.details[0].message)
@@ -822,9 +931,9 @@ export const createEmployee = functions.https.onRequest(async (request, response
             }, {merge: true});
 
             return response.status(200).send('Employee added successfully');
-            }
-            return response.status(201).send(decoded);
-        });
+        }
+        return response.status(201).send(decoded);
+    });
 
 });
 
@@ -838,11 +947,10 @@ export const getEmployees = functions.https.onRequest(async (request, response) 
             const employees = await admin.firestore()
                 .collection('employeex')
                 .where('branchID', "==", request.headers.branchid)
-                .orderBy('fullName', "asc")
                 .limit(10)
                 .get();
 
-            if (employees.docs.length === 0) return response.status(201).send('No Employees in database');
+            if (employees.docs.length === 0) return response.status(200).send([]);
 
             const list: any = [];
             employees.docs.map(el => list.push({id: el.id, data: el.data()}));
@@ -854,9 +962,9 @@ export const getEmployees = functions.https.onRequest(async (request, response) 
 
 export const updateEmployees = functions.https.onRequest(async (request, response) => {
 
-        return corsHandler(request, response, async () => {
-            const decoded = auth(request, response);
-            if (decoded === undefined) {
+    return corsHandler(request, response, async () => {
+        const decoded = auth(request, response);
+        if (decoded === undefined) {
             const employee = await admin.firestore().collection('employeex').doc(request.body.employeeID).get();
             if (!employee.exists) return response.status(201).send('Employee does not exist Or wrong employeeID');
 
@@ -903,16 +1011,60 @@ export const updateEmployees = functions.https.onRequest(async (request, respons
             await admin.firestore().collection('employeex').doc(request.body.employeeID).set(data, {merge: true});
 
             return response.status(200).send('Employee Updated');
-            }
-            return response.status(201).send(decoded);
-        });
+        }
+        return response.status(201).send(decoded);
+    });
 
 });
 
-//raw Item
+//Invantory Item
 
+export const createInventoryItem = functions.https.onRequest(async (request, response) => {
 
-//Inventory Item
+    return corsHandler(request, response, async () => {
+        const decoded = auth(request, response);
+        if (decoded === undefined) {
+            const {error} = validateInventoryItem(request.body);
+            if (error) {
+                return response.status(201).send(error.details[0].message)
+            }
+            const Items = await admin.firestore()
+                .collection('InventoryItems')
+                .where("name", "==", request.body.name).get();
+            if (Items.docs.length > 0) return response.status(201).send('Item already exist');
+
+            const keywords: Array<string> = generateKeywords(request.body.name).concat(generateKeywords(request.body.category.name));
+
+            await admin.firestore().collection('InventoryItems').add(addInventoryItem(request.body, keywords));
+            return response.status(200).send('Inventory Item Created successfully');
+        }
+        return response.status(201).send(decoded);
+    });
+
+});
+
+export const getInventoryItems = functions.https.onRequest(async (request, response) => {
+    return corsHandler(request, response, async () => {
+        const decoded = auth(request, response);
+        if (decoded === undefined) {
+            if (request.headers.branchid === undefined) {
+                return response.status(201).send('No branchid in header');
+            }
+            const Items = await admin.firestore()
+                .collection('InventoryItems')
+                .where('branchID', "==", request.headers.branchid)
+                .limit(10)
+                .get();
+
+            if (Items.docs.length === 0) return response.status(200).send([]);
+
+            const list: any = [];
+            Items.docs.map(el => list.push({id: el.id, data: el.data()}));
+            return response.status(200).send(list);
+        }
+        return response.status(201).send(decoded);
+    });
+});
 
 
 //category / unit
@@ -922,7 +1074,7 @@ export const createCategories = functions.https.onRequest(async (request, respon
         if (decoded === undefined) {
             const {error} = validateCategory_unit(request.body);
             if (error) {
-                return response.status(201).send(JSON.stringify(error));
+                return response.status(201).send(error.details[0].message);
             }
 
             const branch = await admin.firestore().collection('branches').doc(request.body.branchID).get();
@@ -972,7 +1124,7 @@ export const createUnit = functions.https.onRequest(async (request, response) =>
         if (decoded === undefined) {
             const {error} = validateCategory_unit(request.body);
             if (error) {
-                return response.status(201).send(JSON.stringify(error));
+                return response.status(201).send(error.details[0].message);
             }
 
             const branch = await admin.firestore().collection('branches').doc(request.body.branchID).get();
@@ -1024,7 +1176,7 @@ export const createStorage = functions.https.onRequest(async (request, response)
         if (decoded === undefined) {
             const {error} = validateStorage(request.body);
             if (error) {
-                return response.status(201).send(JSON.stringify(error));
+                return response.status(201).send(error.details[0].message);
             }
 
             const branch = await admin.firestore().collection('branches').doc(request.body.branchID).get();
@@ -1070,9 +1222,9 @@ export const getStorages = functions.https.onRequest(async (request, response) =
 
 export const updateStorage = functions.https.onRequest(async (request, response) => {
 
-        return corsHandler(request, response, async () => {
-            const decoded = auth(request, response);
-            if (decoded === undefined) {
+    return corsHandler(request, response, async () => {
+        const decoded = auth(request, response);
+        if (decoded === undefined) {
             const supplier = await admin.firestore().collection('Storages').doc(request.body.storageID).get();
             if (!supplier.exists) return response.status(201).send('Storages does not exist Or wrong storageID');
 
@@ -1092,7 +1244,7 @@ export const updateStorage = functions.https.onRequest(async (request, response)
             return response.status(200).send('Storage Updated');
         }
         return response.status(201).send(decoded);
-        });
+    });
 
 });
 
@@ -1104,12 +1256,24 @@ export const createWastage = functions.https.onRequest(async (request, response)
         if (decoded === undefined) {
             const {error} = validateWastage(request.body);
             if (error) {
-                return response.status(201).send(JSON.stringify(error));
+                return response.status(201).send(error.details[0].message);
             }
             const branch = await admin.firestore().collection('branches').doc(request.body.branchID).get();
             if (!branch.exists) return response.status(201).send('branch does not exist');
 
-            await admin.firestore().collection('Wastages').add(addWastages(request.body, 'Not_sure'));
+            if (request.body.item.id === undefined) return response.status(201).send('Item Id is invalid');
+            let ppu: number;
+            if (request.body.type === 'ITEM') {
+                const item: any = await admin.firestore().collection('Items').doc(request.body.item.id).get();
+                ppu = item.data().price;
+            } else {
+                const ingredient: any = await admin.firestore().collection('InventoryItems').doc(request.body.item.id).get();
+                ppu = ingredient.data().pricePerUnit;
+            }
+
+            const cost: number = ppu * request.body.units;
+
+            await admin.firestore().collection('Wastages').add(addWastage(request.body, cost));
             return response.status(200).send('Wastage Added');
         }
         return response.status(201).send(decoded);
@@ -1144,6 +1308,46 @@ export const getWastages = functions.https.onRequest(async (request, response) =
 
 
 //expense
+export const createExpenseCategory = functions.https.onRequest(async (request, response) => {
+    return corsHandler(request, response, async () => {
+        const decoded = auth(request, response);
+        if (decoded === undefined) {
+            const {error} = validateExpenseCategory(request.body);
+            if (error) {
+                return response.status(201).send(error.details[0].message);
+            }
+            const branch = await admin.firestore().collection('branches').doc(request.body.branchID).get();
+            if (!branch.exists) return response.status(201).send('branch does not exist');
+
+            await admin.firestore().collection('ExpenseCategories').add(addExpenseCategory(request.body));
+            return response.status(200).send('Expense Category Added');
+        }
+        return response.status(201).send(decoded);
+    });
+});
+
+export const getExpenseCategory = functions.https.onRequest(async (request, response) => {
+    return corsHandler(request, response, async () => {
+        const decoded = auth(request, response);
+        if (decoded === undefined) {
+            if (request.headers.branchid === undefined) {
+                return response.status(201).send('No branchid in header');
+            }
+            const expenses = await admin.firestore()
+                .collection('ExpenseCategories')
+                .where('branchID', "==", request.headers.branchid)
+                .get();
+
+            if (expenses.docs.length === 0) return response.status(201).send([]);
+
+            const list: any = [];
+            expenses.docs.map(el => list.push({id: el.id, data: el.data()}));
+            return response.status(200).send(list);
+        }
+        return response.status(201).send(decoded);
+    });
+});
+
 export const createExpense = functions.https.onRequest(async (request, response) => {
     return corsHandler(request, response, async () => {
         const decoded = auth(request, response);
@@ -1219,7 +1423,7 @@ export const searchMenuItems = functions.https.onRequest((request, response) => 
         if (decoded === undefined) {
             if (request.headers.branchid === undefined || request.headers.keystring === undefined) return response.status(201).send('branchId is undefined');
             const data = await admin.firestore()
-                .collection('onlineOrders')
+                .collection('Items')
                 .where('branchID', '==', request.headers.branchid)
                 .where('keywords', 'array-contains', request.headers.keystring)
                 .limit(10)
@@ -1227,8 +1431,33 @@ export const searchMenuItems = functions.https.onRequest((request, response) => 
             if (data.docs.length === 0) {
                 return response.status(200).send([]);
             }
-            const list: any = [];
-            data.docs.map(el => list.push({id: el.id, data: el.data()}));
+            const list: Array<any> = [];
+            data.docs.map(ele => {
+                let isPresent = false
+                list.map(elem => {
+                    if (ele.data().categoryName === elem.category.name) {
+                        return isPresent = true
+                    }
+                    return
+                })
+
+                let category = !isPresent ? ele.data().categoryName : null;
+                let categoryItems: Array<any> = [];
+
+                if (category !== null) {
+                    data.docs.map(element => {
+                        if (element.data().categoryName === category) {
+                            return categoryItems.push({id:element.id,data:element.data()});
+                        }
+                        return
+                    })
+                    return list.push({
+                        category: {name: ele.data().category.name, icon: ele.data().category.icon},
+                        items: categoryItems
+                    })
+                }
+                return
+            })
 
             return response.status(200).send(list);
         }

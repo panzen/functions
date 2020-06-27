@@ -132,7 +132,7 @@ export const addEmployee = function (body: {
     branchID: string,
     contactNumber: string,
     profilePic: string,
-    accountDetails?: {
+    accountDetails: {
         name: string,
         bankName: string,
         number: string,
@@ -142,15 +142,16 @@ export const addEmployee = function (body: {
     payScale: { price: number, scale: string },
     address: string,
     designation: string,
-    gender:string,
-    rating:number,
-    status:string,
-    workingHours:number,
-    employementType:string
+    gender: string,
+    rating: number,
+    status: string,
+    workingHours: number,
+    employementType: string
 }, passwordEncrypted: string, keywords: Array<string>) {
     return {
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        fullName: body.fullName,
+        branchID: body.branchID,
+        name: body.fullName,
         email: body.email,
         password: passwordEncrypted,
         profilePic: body.profilePic,
@@ -160,11 +161,11 @@ export const addEmployee = function (body: {
         gender: body.gender,
         address: body.address,
         payScale: body.payScale,
-        rating:body.rating,
+        rating: 0,
         designation: body.designation,
-        status:'ACTIVE',
-        workingHours:body.workingHours,
-        employementType:body.employementType,
+        status: 'ACTIVE',
+        workingHours: body.workingHours,
+        employementType: body.employementType,
     }
 };
 
@@ -192,7 +193,10 @@ export const addReservation = function (body: {
 
 export const addItem = function (body: {
     name: string,
-    category: string,
+    category: {
+        name:string,
+        icon:string
+    },
     branchID: string,
     ratings: number,
     availability: boolean,
@@ -206,6 +210,7 @@ export const addItem = function (body: {
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         name: body.name,
         category: body.category,
+        categoryName:body.category.name,
         branchID: body.branchID,
         ratings: body.ratings,
         availability: body.availability,
@@ -239,7 +244,7 @@ export const addTable = function (body: {
 export const addCombo = function (body: {
     branchID: string,
     name: string,
-    items: Array<string>,
+    items: Array<{ name: string, id: string }>,
     description: string,
     rating: number,
     price: number,
@@ -269,7 +274,7 @@ export const addOnlineOrder = function (body: {
         id: string, name: string, quantity: number
     }>,
     value: number,
-},  createdDate:Date) {
+}, createdDate: Date) {
     const date: Date = createdDate;
     return {
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -310,11 +315,9 @@ export const addSupplier = function (body: {
     fullName: string,
     contactNumber: string,
     email: string,
-    rawItems: Array<{
-        id: string,
-        name: string
-    }>,
+    rawItems: Array<{id:string,name:string}>,
     method: 'CASH' | 'BANKING',
+    branchID: string,
     accountDetails?: {
         name: string,
         bankName: string,
@@ -322,7 +325,6 @@ export const addSupplier = function (body: {
         ifsc: string,
         gst: string
     },
-    branchID: string,
 }, keywords: Array<string>) {
     return {
         fullName: body.fullName,
@@ -338,12 +340,25 @@ export const addSupplier = function (body: {
 
 export const addCategory_unit = function (body: {
     name: string,
-    default: boolean,
+    defaultBool: boolean,
     branchID: string,
 }) {
     return {
         name: body.name,
-        default: body.default,
+        defaultBool: body.defaultBool,
+        branchID: body.branchID,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+    }
+};
+
+export const addMenu_category = function (body: {
+    name: string,
+    icon: string,
+    branchID: string,
+}) {
+    return {
+        name: body.name,
+        icon: body.icon,
         branchID: body.branchID,
         createdAt: admin.firestore.FieldValue.serverTimestamp()
     }
@@ -354,7 +369,7 @@ export const addStorage = function (body: {
     cleaningSchedule: string,
     branchID: string,
     lastClean: Date,
-    employeeIncharge: {
+    employeeInCharge: {
         id: string,
         name: string
     }
@@ -364,33 +379,35 @@ export const addStorage = function (body: {
         cleaningSchedule: body.cleaningSchedule,
         branchID: body.branchID,
         lastClean: body.lastClean,
-        employeeIncharge: body.employeeIncharge,
+        employeeInCharge: body.employeeInCharge,
         createdAt: admin.firestore.FieldValue.serverTimestamp()
     }
 };
 
-export const addWastages = function (body: {
+export const addWastage = function (body: {
     item: { id: string, name: string },
     branchID: string,
     type: string,
     reason: string,
-    employeeIncharge: {
+    employeeInCharge: {
         id: string,
         name: string
     },
-    units: string,
-    UOM?: string,
-
-}, cost: string) {
+    units: number,
+    UOM: {
+        id: string,
+        name: string
+    }
+}, cost: number) {
     return {
         items: body.item,
         branchID: body.branchID,
         type: body.type,
         reason: body.reason,
-        employeeIncharge: body.employeeIncharge,
+        employeeInCharge: body.employeeInCharge,
         units: body.units,
-        UOM: body.UOM,
         cost,
+        UOM: body.UOM,
         createdAt: admin.firestore.FieldValue.serverTimestamp()
     }
 };
@@ -421,6 +438,52 @@ export const addExpense = function (body: {
         billAmount: body.billAmount,
         period: body.period,
         keywords,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+    }
+};
+
+export const addExpenseCategory = function (body: {
+    branchID: string,
+    name: string
+}) {
+    return {
+        branchID: body.branchID,
+        name: body.name,
+        createdAt: admin.firestore.FieldValue.serverTimestamp()
+    }
+};
+
+export const addInventoryItem = function (body: {
+    name: string,
+    branchID: string,
+    life: number,
+    category: {
+        id: string,
+        name: string
+    },
+    pricePerUnit: number,
+    UOM: {
+        id: string,
+        name: string
+    },
+    storage: {
+        id: string,
+        name: string
+    },
+    UIH: number,
+    totalCost: number
+}, keywords: Array<string>) {
+    return {
+        name: body.name,
+        branchID: body.branchID,
+        life: body.life,
+        category: body.category,
+        pricePerUnit: body.pricePerUnit,
+        UOM: body.UOM,
+        storage: body.storage,
+        UIH: body.UIH,
+        keywords,
+        totalCost: body.totalCost,
         createdAt: admin.firestore.FieldValue.serverTimestamp()
     }
 };
